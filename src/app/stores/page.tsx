@@ -2,33 +2,36 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useQuery, useMutation } from '@apollo/client/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Header } from '@/components/Header';
+import { GET_STORES, CREATE_STORE, UPDATE_STORE, DELETE_STORE } from '@/lib/graphql/stores';
 
 interface Store {
   id: string;
   name: string;
   address?: string;
-  type?: string;
+  phone?: string;
+  website?: string;
+  createdAt: string;
 }
 
-// Mock data - replace with actual GraphQL query
-const mockStores: Store[] = [
-  { id: '1', name: 'Walmart', address: '123 Main St', type: 'Grocery' },
-  { id: '2', name: 'Home Depot', address: '456 Oak Ave', type: 'Home Improvement' },
-  { id: '3', name: 'Costco', address: '789 Pine Rd', type: 'Wholesale' },
-];
-
 export default function StoresPage() {
-  const { user, loading } = useAuth();
-  const [stores, setStores] = useState<Store[]>(mockStores);
+  const { user, loading: authLoading } = useAuth();
+  const { data, loading: queryLoading, error, refetch } = useQuery<{ stores: Store[] }>(GET_STORES);
+  const [createStore] = useMutation(CREATE_STORE);
+  const [updateStore] = useMutation(UPDATE_STORE);
+  const [deleteStore] = useMutation(DELETE_STORE);
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
-  const [formData, setFormData] = useState({ name: '', address: '', type: '' });
+  const [formData, setFormData] = useState({ name: '', address: '', phone: '', website: '' });
+
+  const stores = data?.stores || [];
 
   const handleOpenAddModal = () => {
     setEditingStore(null);
-    setFormData({ name: '', address: '', type: '' });
+    setFormData({ name: '', address: '', phone: '', website: '' });
     setShowAddModal(true);
   };
 
@@ -37,46 +40,76 @@ export default function StoresPage() {
     setFormData({
       name: store.name,
       address: store.address || '',
-      type: store.type || '',
+      phone: store.phone || '',
+      website: store.website || '',
     });
     setShowAddModal(true);
   };
 
-  const handleSaveStore = () => {
+  const handleSaveStore = async () => {
     if (!formData.name.trim()) return;
 
-    if (editingStore) {
-      setStores(stores.map(s =>
-        s.id === editingStore.id
-          ? { ...s, name: formData.name, address: formData.address, type: formData.type }
-          : s
-      ));
-    } else {
-      const newStore: Store = {
-        id: Date.now().toString(),
-        name: formData.name,
-        address: formData.address || undefined,
-        type: formData.type || undefined,
-      };
-      setStores([...stores, newStore]);
+    try {
+      if (editingStore) {
+        await updateStore({
+          variables: {
+            id: editingStore.id,
+            input: {
+              name: formData.name,
+              address: formData.address || null,
+              phone: formData.phone || null,
+              website: formData.website || null,
+            },
+          },
+        });
+      } else {
+        await createStore({
+          variables: {
+            input: {
+              name: formData.name,
+              address: formData.address || null,
+              phone: formData.phone || null,
+              website: formData.website || null,
+            },
+          },
+        });
+      }
+      
+      // Refetch stores after mutation
+      await refetch();
+      
+      setShowAddModal(false);
+      setFormData({ name: '', address: '', phone: '', website: '' });
+      setEditingStore(null);
+    } catch (error) {
+      console.error('Error saving store:', error);
+      alert('Failed to save store. Please try again.');
     }
-
-    setShowAddModal(false);
-    setFormData({ name: '', address: '', type: '' });
-    setEditingStore(null);
   };
 
-  const handleDeleteStore = (id: string) => {
-    if (confirm('Are you sure you want to delete this store?')) {
-      setStores(stores.filter(s => s.id !== id));
+  const handleDeleteStore = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this store?')) return;
+
+    try {
+      await deleteStore({
+        variables: { id },
+      });
+      
+      // Refetch stores after deletion
+      await refetch();
+    } catch (error) {
+      console.error('Error deleting store:', error);
+      alert('Failed to delete store. Please try again.');
     }
   };
 
   const handleCancelModal = () => {
     setShowAddModal(false);
-    setFormData({ name: '', address: '', type: '' });
+    setFormData({ name: '', address: '', phone: '', website: '' });
     setEditingStore(null);
   };
+
+  const loading = authLoading || queryLoading;
 
   if (loading) {
     return (
@@ -108,6 +141,13 @@ export default function StoresPage() {
       
       <main className="flex-1">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {error && (
+            <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/20">
+              <div className="text-sm text-red-800 dark:text-red-200">
+                Error loading stores: {error.message}
+              </div>
+            </div>
+          )}
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -169,7 +209,10 @@ export default function StoresPage() {
                       Address
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                      Type
+                      Phone
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                      Website
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                       Actions
@@ -186,7 +229,21 @@ export default function StoresPage() {
                         {store.address || '-'}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-zinc-600 dark:text-zinc-400">
-                        {store.type || '-'}
+                        {store.phone || '-'}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-zinc-600 dark:text-zinc-400">
+                        {store.website ? (
+                          <a
+                            href={store.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            {store.website}
+                          </a>
+                        ) : (
+                          '-'
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
@@ -318,14 +375,27 @@ export default function StoresPage() {
 
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Type
+                  Phone
                 </label>
                 <input
-                  type="text"
-                  value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white"
-                  placeholder="e.g., Grocery, Home Improvement"
+                  placeholder="e.g., (555) 123-4567"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Website
+                </label>
+                <input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white"
+                  placeholder="e.g., https://www.example.com"
                 />
               </div>
             </div>
