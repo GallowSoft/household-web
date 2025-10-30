@@ -21,7 +21,10 @@ export const CREATE_STORE = gql`
       address
       phone
       website
+      isActive
+      createdBy
       createdAt
+      updatedAt
     }
   }
 `;
@@ -41,9 +44,7 @@ export const UPDATE_STORE = gql`
 
 export const DELETE_STORE = gql`
   mutation DeleteStore($id: ID!) {
-    deleteStore(id: $id) {
-      id
-    }
+    deleteStore(id: $id)
   }
 `;
 

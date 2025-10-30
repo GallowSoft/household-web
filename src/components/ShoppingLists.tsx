@@ -1,24 +1,79 @@
 'use client';
 
-import { useState } from 'react';
+import { useQuery } from '@apollo/client/react';
+import { GET_SHOPPING_LISTS } from '@/lib/graphql/shopping-lists';
+
+interface Store {
+  id: string;
+  name: string;
+}
 
 interface ShoppingList {
   id: string;
   name: string;
-  store?: string;
-  itemCount?: number;
-  lastUpdated?: string;
+  store?: Store | null;
+  itemsCount?: number;
+  updatedAt?: string;
+  createdAt: string;
 }
 
-// Mock data - replace with actual GraphQL query
-const mockLists: ShoppingList[] = [
-  { id: '1', name: 'Weekly Groceries', store: 'Walmart', itemCount: 12, lastUpdated: '2 days ago' },
-  { id: '2', name: 'Home Depot', store: 'Home Depot', itemCount: 5, lastUpdated: '1 week ago' },
-  { id: '3', name: 'Costco Run', store: 'Costco', itemCount: 8, lastUpdated: '3 days ago' },
-];
-
 export function ShoppingLists() {
-  const [lists, setLists] = useState<ShoppingList[]>(mockLists);
+  const { data, loading, error } = useQuery<{ shoppingLists: ShoppingList[] }>(GET_SHOPPING_LISTS);
+
+  const lists = data?.shoppingLists || [];
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return null;
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+      
+      if (diffInSeconds < 60) return 'just now';
+      if (diffInSeconds < 3600) {
+        const mins = Math.floor(diffInSeconds / 60);
+        return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+      }
+      if (diffInSeconds < 86400) {
+        const hours = Math.floor(diffInSeconds / 3600);
+        return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+      }
+      if (diffInSeconds < 604800) {
+        const days = Math.floor(diffInSeconds / 86400);
+        return `${days} day${days === 1 ? '' : 's'} ago`;
+      }
+      if (diffInSeconds < 2592000) {
+        const weeks = Math.floor(diffInSeconds / 604800);
+        return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+      }
+      const months = Math.floor(diffInSeconds / 2592000);
+      return `${months} month${months === 1 ? '' : 's'} ago`;
+    } catch {
+      return null;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-lg text-zinc-600 dark:text-zinc-400">Loading shopping lists...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="rounded-md bg-red-50 p-4 dark:bg-red-900/20">
+          <div className="text-sm text-red-800 dark:text-red-200">
+            Error loading shopping lists: {error.message}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -72,11 +127,11 @@ export function ShoppingLists() {
                       d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                     />
                   </svg>
-                  {list.store}
+                  {list.store.name}
                 </div>
               )}
               
-              {list.itemCount !== undefined && (
+              {typeof list.itemsCount === 'number' && (
                 <div className="flex items-center gap-2">
                   <svg
                     className="h-4 w-4"
@@ -91,11 +146,11 @@ export function ShoppingLists() {
                       d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                     />
                   </svg>
-                  {list.itemCount} items
+                  {list.itemsCount} {list.itemsCount === 1 ? 'item' : 'items'}
                 </div>
               )}
               
-              {list.lastUpdated && (
+              {list.updatedAt && formatDate(list.updatedAt) && (
                 <div className="flex items-center gap-2">
                   <svg
                     className="h-4 w-4"
@@ -110,7 +165,7 @@ export function ShoppingLists() {
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  Updated {list.lastUpdated}
+                  Updated {formatDate(list.updatedAt)}
                 </div>
               )}
             </div>

@@ -21,11 +21,13 @@ export default function StoresPage() {
   const { data, loading: queryLoading, error, refetch } = useQuery<{ stores: Store[] }>(GET_STORES);
   const [createStore] = useMutation(CREATE_STORE);
   const [updateStore] = useMutation(UPDATE_STORE);
-  const [deleteStore] = useMutation(DELETE_STORE);
+  type DeleteStoreResult = { deleteStore: boolean };
+  const [deleteStore] = useMutation<DeleteStoreResult>(DELETE_STORE);
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [formData, setFormData] = useState({ name: '', address: '', phone: '', website: '' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const stores = data?.stores || [];
 
@@ -91,15 +93,22 @@ export default function StoresPage() {
     if (!confirm('Are you sure you want to delete this store?')) return;
 
     try {
-      await deleteStore({
+      setDeletingId(id);
+      const result = await deleteStore({
         variables: { id },
       });
+      const success = result.data?.deleteStore;
+      if (!success) {
+        alert('Store could not be deleted. It may be in use or you lack permission.');
+      }
       
       // Refetch stores after deletion
       await refetch();
     } catch (error) {
       console.error('Error deleting store:', error);
       alert('Failed to delete store. Please try again.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -268,8 +277,9 @@ export default function StoresPage() {
                           </button>
                           <button
                             onClick={() => handleDeleteStore(store.id)}
+                            disabled={deletingId === store.id}
                             aria-label="Delete store"
-                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                            className="text-red-600 hover:text-red-900 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
                           >
                             <svg
                               className="h-5 w-5"
